@@ -2,32 +2,43 @@ package cmd
 
 import (
 	"context"
-	"log"
+	"sort"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
-func foo() {
-	// Load the Shared AWS Configuration (~/.aws/config)
+func rdsClient() (*rds.Client, error) {
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	// Create an Amazon S3 service client
-	client := rds.NewFromConfig(cfg)
+	return rds.NewFromConfig(cfg), nil
+}
+
+func getSnapshot(clusterID string) (types.DBClusterSnapshot, error) {
+	client, err := rdsClient()
+	if err != nil {
+		return types.DBClusterSnapshot{}, err
+	}
 
 	output, err := client.DescribeDBClusterSnapshots(context.TODO(), &rds.DescribeDBClusterSnapshotsInput{
 		DBClusterIdentifier: aws.String(clusterID),
+		MaxRecords:          aws.Int32(20),
+		// SnapshotType:        aws.String("automated"),
 	})
 	if err != nil {
-		log.Fatal(err)
+		return types.DBClusterSnapshot{}, err
 	}
 
-	log.Println("results:")
-	for _, v := range output.DBClusterSnapshots {
-		log.Printf("%+v, %+v\n", aws.ToString(v.DBClusterSnapshotIdentifier), v.SnapshotCreateTime.String())
-	}
+	sort.Slice(output.DBClusterSnapshots, func(i, j int) bool {
+		it := *output.DBClusterSnapshots[i].SnapshotCreateTime
+		jt := *output.DBClusterSnapshots[j].SnapshotCreateTime
+		return it.Before(jt)
+	})
+
+	return output.DBClusterSnapshots[len(output.DBClusterSnapshots)-1], nil
 }

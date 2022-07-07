@@ -2,21 +2,23 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfg       string
+	cfgFile   string
 	clusterID string
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "rdsvalidator",
 	Short: "CLI to automate validation of RDS backups",
-	Run:   runner,
+	Run:   main,
 }
 
 // Execute adds all child commands to the root command and sets flags
@@ -31,14 +33,14 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfg, "config", "", "config file (default is ./config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "pattern used to match snapshot name")
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	if cfg != "" { // enable ability to specify config file via flag
-		viper.SetConfigFile(cfg)
+	if cfgFile != "" { // enable ability to specify config file via flag
+		viper.SetConfigFile(cfgFile)
 	}
 
 	viper.SetConfigName("config") // name of config file (without extension)
@@ -52,6 +54,10 @@ func initConfig() {
 	}
 }
 
-func runner(cmd *cobra.Command, args []string) {
-	foo()
+func main(cmd *cobra.Command, args []string) {
+	snapshot, err := getSnapshot(clusterID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBClusterSnapshotIdentifier), snapshot.SnapshotCreateTime)
 }
