@@ -13,6 +13,7 @@ import (
 var (
 	cfgFile   string
 	clusterID string
+	logger    *log.Logger
 )
 
 var rootCmd = &cobra.Command{
@@ -32,6 +33,8 @@ func Execute() {
 }
 
 func init() {
+	logger = log.New(os.Stderr, "", log.Lshortfile)
+
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "pattern used to match snapshot name")
@@ -55,9 +58,17 @@ func initConfig() {
 }
 
 func main(cmd *cobra.Command, args []string) {
-	snapshot, err := getSnapshot(clusterID)
+	// snapshot, err := getSnapshot(clusterID)
+	snapshot, err := getClusterSnapshot(clusterID)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
+	// fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBSnapshotIdentifier), snapshot.SnapshotCreateTime)
 	fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBClusterSnapshotIdentifier), snapshot.SnapshotCreateTime)
+
+	res, err := createDBCluster(snapshot)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
 }
