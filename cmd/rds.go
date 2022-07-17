@@ -25,8 +25,8 @@ type getResult struct {
 }
 
 type clusterMember struct {
-	InstanceIdentifier string
-	ClusterWriter      bool
+	Identifier string `json:"identifier,omitempty"`
+	Writer     bool   `json:"writer,omitempty"`
 }
 
 type cluster struct {
@@ -36,8 +36,8 @@ type cluster struct {
 }
 
 type instance struct {
-	Identifier string `json:"instance_identifier,omitempty"`
-	Status     string `json:"instance_status,omitempty"`
+	Identifier string `json:"identifier,omitempty"`
+	Status     string `json:"status,omitempty"`
 }
 
 type databasesOutput struct {
@@ -111,8 +111,8 @@ func printDatabases(r getResult) error {
 		c.Status = aws.ToString(v.Status)
 		for _, vv := range v.DBClusterMembers {
 			var m clusterMember
-			m.InstanceIdentifier = aws.ToString(vv.DBInstanceIdentifier)
-			m.ClusterWriter = vv.IsClusterWriter
+			m.Identifier = aws.ToString(vv.DBInstanceIdentifier)
+			m.Writer = vv.IsClusterWriter
 			c.Members = append(c.Members, m)
 		}
 		out.Clusters = append(out.Clusters, c)
