@@ -13,6 +13,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
+type getResult struct {
+	Clusters  []types.DBCluster
+	Instances []types.DBInstance
+}
+
 type createResult struct {
 	Cluster  types.DBCluster
 	Instance types.DBInstance
@@ -25,6 +30,72 @@ func rdsClient() (*rds.Client, error) {
 	}
 
 	return rds.NewFromConfig(cfg), nil
+}
+
+func getDatabases() (getResult, error) {
+	var r getResult
+
+	client, err := rdsClient()
+	if err != nil {
+		return r, err
+	}
+
+	cout, err := client.DescribeDBClusters(context.TODO(), &rds.DescribeDBClustersInput{
+		IncludeShared: true,
+	})
+	if err != nil {
+		return r, err
+	}
+	r.Clusters = cout.DBClusters
+	// handle pagination
+	for cout.Marker != nil {
+		cout, err = client.DescribeDBClusters(context.TODO(), &rds.DescribeDBClustersInput{
+			IncludeShared: true,
+			Marker:        cout.Marker,
+		})
+		if err != nil {
+			return r, err
+		}
+		r.Clusters = append(r.Clusters, cout.DBClusters...)
+	}
+
+	// TODO: handle pagination
+	iout, err := client.DescribeDBInstances(context.TODO(), &rds.DescribeDBInstancesInput{})
+	if err != nil {
+		return r, err
+	}
+	r.Instances = iout.DBInstances
+	// handle pagination
+	for iout.Marker != nil {
+		iout, err = client.DescribeDBInstances(context.TODO(), &rds.DescribeDBInstancesInput{
+			Marker: iout.Marker,
+		})
+		if err != nil {
+			return r, err
+		}
+		r.Instances = append(r.Instances, iout.DBInstances...)
+	}
+
+	return r, nil
+}
+
+// TODO: output json
+func printDatabases(r getResult) {
+	fmt.Println("Clusters:")
+	for k, v := range r.Clusters {
+		fmt.Printf("[%d/%d] clusterID:%s status:%s\n", k+1, len(r.Clusters), *v.DBClusterIdentifier, *v.Status)
+	}
+
+	fmt.Printf("\nInstances:\n")
+	var nonClusterInstances []types.DBInstance
+	for _, v := range r.Instances {
+		if v.DBClusterIdentifier == nil {
+			nonClusterInstances = append(nonClusterInstances, v)
+		}
+	}
+	for k, v := range nonClusterInstances {
+		fmt.Printf("[%d/%d] instanceID:%s status=%s\n", k+1, len(nonClusterInstances), *v.DBInstanceIdentifier, *v.DBInstanceStatus)
+	}
 }
 
 func getClusterSnapshot(clusterID string) (types.DBClusterSnapshot, error) {

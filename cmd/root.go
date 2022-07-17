@@ -5,15 +5,17 @@ import (
 	"log"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile   string
-	clusterID string
-	logger    *log.Logger
+	cfgFile       string
+	clusterID     string
+	listDatabases = false
+	listSnapshots = false
+
+	logger *log.Logger
 )
 
 var rootCmd = &cobra.Command{
@@ -38,6 +40,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "pattern used to match snapshot name")
+	rootCmd.PersistentFlags().BoolVar(&listDatabases, "list-db", listDatabases, "list available DB clusters and instances")
+	rootCmd.PersistentFlags().BoolVar(&listSnapshots, "list-snapshot", listSnapshots, "list available DB snapshots")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -58,17 +62,30 @@ func initConfig() {
 }
 
 func main(cmd *cobra.Command, args []string) {
-	// snapshot, err := getSnapshot(clusterID)
-	snapshot, err := getClusterSnapshot(clusterID)
-	if err != nil {
-		logger.Fatal(err)
+	if listDatabases {
+		res, err := getDatabases()
+		if err != nil {
+			logger.Fatal(err)
+		}
+		printDatabases(res)
+		return
 	}
-	// fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBSnapshotIdentifier), snapshot.SnapshotCreateTime)
-	fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBClusterSnapshotIdentifier), snapshot.SnapshotCreateTime)
 
-	res, err := createDBCluster(snapshot)
-	if err != nil {
-		logger.Fatal(err)
-	}
-	fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
+	// snapshot, err := getSnapshot(clusterID)
+	// if err != nil {
+	// 	logger.Fatal(err)
+	// }
+	// fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBSnapshotIdentifier), snapshot.SnapshotCreateTime)
+
+	// snapshot, err := getClusterSnapshot(clusterID)
+	// if err != nil {
+	// 	logger.Fatal(err)
+	// }
+	// fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBClusterSnapshotIdentifier), snapshot.SnapshotCreateTime)
+
+	// res, err := createDBCluster(snapshot)
+	// if err != nil {
+	// 	logger.Fatal(err)
+	// }
+	// fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
 }
