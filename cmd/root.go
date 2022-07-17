@@ -67,7 +67,10 @@ func main(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal(err)
 		}
-		printDatabases(res)
+		err = printDatabases(res)
+		if err != nil {
+			logger.Fatal(err)
+		}
 		return
 	}
 

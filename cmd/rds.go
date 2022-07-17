@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -13,15 +14,38 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
+type createResult struct {
+	Cluster  types.DBCluster
+	Instance types.DBInstance
+}
+
 type getResult struct {
 	Clusters  []types.DBCluster
 	Instances []types.DBInstance
 }
 
-type createResult struct {
-	Cluster  types.DBCluster
-	Instance types.DBInstance
+type clusterMember struct {
+	InstanceIdentifier string
+	ClusterWriter      bool
 }
+
+type cluster struct {
+	Identifier string          `json:"identifier,omitempty"`
+	Status     string          `json:"status,omitempty"`
+	Members    []clusterMember `json:"members,omitempty"`
+}
+
+type instance struct {
+	Identifier string `json:"instance_identifier,omitempty"`
+	Status     string `json:"instance_status,omitempty"`
+}
+
+type databasesOutput struct {
+	Clusters  []cluster  `json:"clusters,omitempty"`
+	Instances []instance `json:"instances,omitempty"`
+}
+
+type snapshotsOutput struct{}
 
 func rdsClient() (*rds.Client, error) {
 	cfg, err := config.LoadDefaultConfig(context.TODO())
@@ -59,7 +83,6 @@ func getDatabases() (getResult, error) {
 		r.Clusters = append(r.Clusters, cout.DBClusters...)
 	}
 
-	// TODO: handle pagination
 	iout, err := client.DescribeDBInstances(context.TODO(), &rds.DescribeDBInstancesInput{})
 	if err != nil {
 		return r, err
@@ -79,23 +102,43 @@ func getDatabases() (getResult, error) {
 	return r, nil
 }
 
-// TODO: output json
-func printDatabases(r getResult) {
-	fmt.Println("Clusters:")
-	for k, v := range r.Clusters {
-		fmt.Printf("[%d/%d] clusterID:%s status:%s\n", k+1, len(r.Clusters), *v.DBClusterIdentifier, *v.Status)
+func printDatabases(r getResult) error {
+	var out databasesOutput
+
+	for _, v := range r.Clusters {
+		var c cluster
+		c.Identifier = aws.ToString(v.DBClusterIdentifier)
+		c.Status = aws.ToString(v.Status)
+		for _, vv := range v.DBClusterMembers {
+			var m clusterMember
+			m.InstanceIdentifier = aws.ToString(vv.DBInstanceIdentifier)
+			m.ClusterWriter = vv.IsClusterWriter
+			c.Members = append(c.Members, m)
+		}
+		out.Clusters = append(out.Clusters, c)
 	}
 
-	fmt.Printf("\nInstances:\n")
 	var nonClusterInstances []types.DBInstance
 	for _, v := range r.Instances {
 		if v.DBClusterIdentifier == nil {
 			nonClusterInstances = append(nonClusterInstances, v)
 		}
 	}
-	for k, v := range nonClusterInstances {
-		fmt.Printf("[%d/%d] instanceID:%s status=%s\n", k+1, len(nonClusterInstances), *v.DBInstanceIdentifier, *v.DBInstanceStatus)
+	for _, v := range nonClusterInstances {
+		var i instance
+		i.Identifier = aws.ToString(v.DBInstanceIdentifier)
+		i.Status = aws.ToString(v.DBInstanceStatus)
+		out.Instances = append(out.Instances, i)
 	}
+
+	j, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s\n", j)
+
+	return nil
 }
 
 func getClusterSnapshot(clusterID string) (types.DBClusterSnapshot, error) {
