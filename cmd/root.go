@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	cfgFile    string
 	clusterID  string
 	instanceID string
 	preDir     string
@@ -42,7 +41,6 @@ func init() {
 	logger = log.New(os.Stderr, "", log.Lshortfile)
 
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "use latest snapshot for specified cluster ID")
 	rootCmd.PersistentFlags().StringVar(&instanceID, "instance-id", instanceID, "use latest snapshot for specified instance ID")
 	rootCmd.PersistentFlags().BoolVar(&list, "list", list, "list available DB clusters and instances")
@@ -50,21 +48,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&postDir, "post", postDir, "directory containing scripts to execute after DB creation")
 }
 
-// initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	if cfgFile != "" { // enable ability to specify config file via flag
-		viper.SetConfigFile(cfgFile)
-	}
-
-	viper.SetConfigName("config") // name of config file (without extension)
-	viper.AddConfigPath(".")      // adding home directory as first search path
 	viper.SetEnvPrefix("RV")
 	viper.AutomaticEnv() // read in environment variables that match RV_*
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-	}
 }
 
 func main(cmd *cobra.Command, args []string) {
@@ -114,6 +100,5 @@ func main(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// shouldn't get here
 	cmd.Help()
 }
