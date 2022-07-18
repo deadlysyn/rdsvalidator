@@ -5,15 +5,18 @@ import (
 	"log"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	cfgFile       string
-	clusterID     string
-	listDatabases = false
-	listSnapshots = false
+	cfgFile    string
+	clusterID  string
+	instanceID string
+	preDir     string
+	postDir    string
+	list       = false
 
 	logger *log.Logger
 )
@@ -39,9 +42,11 @@ func init() {
 
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
-	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "pattern used to match snapshot name")
-	rootCmd.PersistentFlags().BoolVar(&listDatabases, "list-db", listDatabases, "list available DB clusters and instances")
-	rootCmd.PersistentFlags().BoolVar(&listSnapshots, "list-snapshot", listSnapshots, "list available DB snapshots")
+	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "use latest snapshot for specified cluster ID")
+	rootCmd.PersistentFlags().StringVar(&instanceID, "instance-id", instanceID, "use latest snapshot for specified instance ID")
+	rootCmd.PersistentFlags().BoolVar(&list, "list", list, "list available DB clusters and instances")
+	rootCmd.PersistentFlags().StringVar(&preDir, "pre", preDir, "directory containing scripts to execute before DB creation")
+	rootCmd.PersistentFlags().StringVar(&postDir, "post", postDir, "directory containing scripts to execute after DB creation")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -62,7 +67,7 @@ func initConfig() {
 }
 
 func main(cmd *cobra.Command, args []string) {
-	if listDatabases {
+	if list {
 		res, err := getDatabases()
 		if err != nil {
 			logger.Fatal(err)
@@ -74,21 +79,38 @@ func main(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// snapshot, err := getSnapshot(clusterID)
-	// if err != nil {
-	// 	logger.Fatal(err)
-	// }
-	// fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBSnapshotIdentifier), snapshot.SnapshotCreateTime)
+	if len(clusterID) > 0 && len(instanceID) > 0 {
+		logger.Fatal(fmt.Errorf("USAGE: must specify one of --cluster-id or --instance-id"))
+	}
 
-	// snapshot, err := getClusterSnapshot(clusterID)
-	// if err != nil {
-	// 	logger.Fatal(err)
-	// }
-	// fmt.Printf("%+v %+v\n", aws.ToString(snapshot.DBClusterSnapshotIdentifier), snapshot.SnapshotCreateTime)
+	if len(clusterID) > 0 {
+		s, err := getClusterSnapshot(clusterID)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		fmt.Printf("%+v %+v\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime)
+		res, err := createClusterFromSnapshot(s)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
+		return
+	}
 
-	// res, err := createDBCluster(snapshot)
-	// if err != nil {
-	// 	logger.Fatal(err)
-	// }
-	// fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
+	if len(instanceID) > 0 {
+		s, err := getInstanceSnapshot(clusterID)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		fmt.Printf("%+v %+v\n", aws.ToString(s.DBSnapshotIdentifier), s.SnapshotCreateTime)
+		res, err := createInstanceFromSnapshot(s)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
+		return
+	}
+
+	// shouldn't get here
+	cmd.Help()
 }

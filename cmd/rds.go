@@ -171,7 +171,7 @@ func getClusterSnapshot(clusterID string) (types.DBClusterSnapshot, error) {
 	return output.DBClusterSnapshots[len(output.DBClusterSnapshots)-1], nil
 }
 
-func getSnapshot(instanceID string) (types.DBSnapshot, error) {
+func getInstanceSnapshot(instanceID string) (types.DBSnapshot, error) {
 	var s types.DBSnapshot
 
 	client, err := rdsClient()
@@ -201,7 +201,7 @@ func getSnapshot(instanceID string) (types.DBSnapshot, error) {
 	return output.DBSnapshots[len(output.DBSnapshots)-1], nil
 }
 
-func createDBInstance(snapshot types.DBSnapshot) (createResult, error) {
+func createInstanceFromSnapshot(snapshot types.DBSnapshot) (createResult, error) {
 	var r createResult
 
 	client, err := rdsClient()
@@ -229,7 +229,7 @@ func createDBInstance(snapshot types.DBSnapshot) (createResult, error) {
 	return r, nil
 }
 
-func createDBCluster(snapshot types.DBClusterSnapshot) (createResult, error) {
+func createClusterFromSnapshot(snapshot types.DBClusterSnapshot) (createResult, error) {
 	var r createResult
 
 	client, err := rdsClient()
