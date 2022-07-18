@@ -73,30 +73,54 @@ func main(cmd *cobra.Command, args []string) {
 	}
 
 	if len(clusterID) > 0 {
-		s, err := getClusterSnapshot(ctx, clusterID)
+		err := runScripts(preDir, "")
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("Using latest cluster snapshot: %s (%s)\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime.String())
-		res, err := createClusterFromSnapshot(ctx, s)
+
+		// s, err := getClusterSnapshot(ctx, clusterID)
+		// if err != nil {
+		// 	logger.Fatal(err)
+		// }
+		// fmt.Printf("Using latest cluster snapshot: %s (%s)\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime.String())
+
+		// res, err := createClusterFromSnapshot(ctx, s)
+		// if err != nil {
+		// 	logger.Fatal(err)
+		// }
+		// fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
+
+		err = runScripts(postDir, "test-endpoint")
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
+
 		return
 	}
 
 	if len(instanceID) > 0 {
+		err := runScripts(preDir, "")
+		if err != nil {
+			logger.Fatal(err)
+		}
+
 		s, err := getInstanceSnapshot(ctx, clusterID)
 		if err != nil {
 			logger.Fatal(err)
 		}
 		fmt.Printf("Using latest instance snapshot: %s (%s)\n", aws.ToString(s.DBSnapshotIdentifier), s.SnapshotCreateTime.String())
+
 		res, err := createInstanceFromSnapshot(ctx, s)
 		if err != nil {
 			logger.Fatal(err)
 		}
 		fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
+
+		err = runScripts(postDir, "TODO_ENDPOINT")
+		if err != nil {
+			logger.Fatal(err)
+		}
+
 		return
 	}
 
