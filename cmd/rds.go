@@ -211,7 +211,7 @@ func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (create
 
 	iout, err := client.RestoreDBInstanceFromDBSnapshot(ctx, &rds.RestoreDBInstanceFromDBSnapshotInput{
 		AutoMinorVersionUpgrade: aws.Bool(false),
-		DBInstanceClass:         aws.String("db.t4g.micro"),
+		DBInstanceClass:         aws.String(instanceType),
 		DBInstanceIdentifier:    aws.String(instanceID),
 		DBSnapshotIdentifier:    s.DBSnapshotArn,
 		Engine:                  s.Engine,
@@ -255,7 +255,7 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 
 	cout, err := client.RestoreDBClusterFromSnapshot(ctx, &rds.RestoreDBClusterFromSnapshotInput{
 		DBClusterIdentifier:    aws.String(clusterID),
-		DBClusterInstanceClass: aws.String("db.t3.medium"),
+		DBClusterInstanceClass: aws.String(instanceType),
 		Engine:                 s.Engine,
 		PubliclyAccessible:     aws.Bool(false),
 		SnapshotIdentifier:     s.DBClusterSnapshotArn,
@@ -285,7 +285,7 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 	iout, err := client.CreateDBInstance(ctx, &rds.CreateDBInstanceInput{
 		AutoMinorVersionUpgrade: aws.Bool(false),
 		DBClusterIdentifier:     aws.String(clusterID),
-		DBInstanceClass:         aws.String("db.t3.medium"),
+		DBInstanceClass:         aws.String(instanceType),
 		DBInstanceIdentifier:    aws.String(clusterID + "-" + "instance-1"),
 		Engine:                  s.Engine,
 		Iops:                    aws.Int32(0),

@@ -12,11 +12,12 @@ import (
 )
 
 var (
-	clusterID  string
-	instanceID string
-	preDir     string
-	postDir    string
-	list       = false
+	clusterID    string
+	instanceID   string
+	instanceType = "db.t3.medium"
+	preDir       string
+	postDir      string
+	list         = false
 
 	logger *log.Logger
 )
@@ -50,6 +51,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "use latest snapshot for specified cluster ID")
 	rootCmd.PersistentFlags().StringVar(&instanceID, "instance-id", instanceID, "use latest snapshot for specified instance ID")
+	rootCmd.PersistentFlags().StringVar(&instanceType, "instance-type", instanceType, "RDS instance type")
 	rootCmd.PersistentFlags().BoolVar(&list, "list", list, "list available DB clusters and instances")
 	rootCmd.PersistentFlags().StringVar(&preDir, "pre", preDir, "directory containing scripts to execute before DB creation")
 	rootCmd.PersistentFlags().StringVar(&postDir, "post", postDir, "directory containing scripts to execute after DB creation")
