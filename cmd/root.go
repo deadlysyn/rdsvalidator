@@ -21,6 +21,13 @@ var (
 	logger *log.Logger
 )
 
+type envVar struct {
+	Key   string
+	Value interface{}
+}
+
+type envVars []envVar
+
 var rootCmd = &cobra.Command{
 	Use:   "rdsvalidator",
 	Short: "CLI to automate validation of RDS backups",
@@ -78,19 +85,37 @@ func main(cmd *cobra.Command, args []string) {
 			logger.Fatal(err)
 		}
 
-		// s, err := getClusterSnapshot(ctx, clusterID)
-		// if err != nil {
-		// 	logger.Fatal(err)
-		// }
-		// fmt.Printf("Using latest cluster snapshot: %s (%s)\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime.String())
+		s, err := getClusterSnapshot(ctx, clusterID)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		fmt.Printf("Using latest cluster snapshot: %s (%s)\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime.String())
 
-		// res, err := createClusterFromSnapshot(ctx, s)
-		// if err != nil {
-		// 	logger.Fatal(err)
-		// }
-		// fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
+		res, err := createClusterFromSnapshot(ctx, s)
+		if err != nil {
+			logger.Fatal(err)
+		}
 
-		err = runScripts(postDir, "test-endpoint")
+		v := envVars{
+			envVar{
+				Key:   "DB_ENDPOINT",
+				Value: aws.ToString(res.Cluster.Endpoint),
+			},
+			envVar{
+				Key:   "DB_NAME",
+				Value: aws.ToString(res.Cluster.DatabaseName),
+			},
+			envVar{
+				Key:   "DB_PORT",
+				Value: aws.ToInt32(res.Cluster.Port),
+			},
+			envVar{
+				Key:   "DB_USER",
+				Value: aws.ToString(res.Cluster.MasterUsername),
+			},
+		}
+
+		err = runScripts(postDir, v)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -114,9 +139,26 @@ func main(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
 
-		err = runScripts(postDir, "TODO_ENDPOINT")
+		v := envVars{
+			envVar{
+				Key:   "DB_ENDPOINT",
+				Value: aws.ToString(res.Instance.Endpoint.Address),
+			},
+			envVar{
+				Key:   "DB_NAME",
+				Value: aws.ToString(res.Instance.DBName),
+			},
+			envVar{
+				Key:   "DB_PORT",
+				Value: aws.ToInt32(&res.Instance.Endpoint.Port),
+			},
+			envVar{
+				Key:   "DB_USER",
+				Value: aws.ToString(res.Instance.MasterUsername),
+			},
+		}
+		err = runScripts(postDir, v)
 		if err != nil {
 			logger.Fatal(err)
 		}

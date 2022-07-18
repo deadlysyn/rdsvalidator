@@ -16,7 +16,7 @@ func getScripts(dir string) ([]fs.FileInfo, error) {
 	return scripts, nil
 }
 
-func runScripts(dir, endpoint string) error {
+func runScripts(dir string, vars envVars) error {
 	fmt.Printf("Executing scripts in %s...\n", dir)
 
 	scripts, err := getScripts(dir)
@@ -29,8 +29,8 @@ func runScripts(dir, endpoint string) error {
 		cmd := exec.Command(dir + "/" + v.Name())
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		if endpoint != "" {
-			cmd.Env = append(cmd.Env, fmt.Sprint("ENDPOINT=", endpoint))
+		for _, vv := range vars {
+			cmd.Env = append(cmd.Env, fmt.Sprint(vv.Key, vv.Value))
 		}
 		err := cmd.Run()
 		if err != nil {
