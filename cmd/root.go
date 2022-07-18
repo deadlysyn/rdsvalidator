@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -67,8 +68,10 @@ func initConfig() {
 }
 
 func main(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
+
 	if list {
-		res, err := getDatabases()
+		res, err := getDatabases(ctx)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -80,34 +83,34 @@ func main(cmd *cobra.Command, args []string) {
 	}
 
 	if len(clusterID) > 0 && len(instanceID) > 0 {
-		logger.Fatal(fmt.Errorf("USAGE: must specify one of --cluster-id or --instance-id"))
+		logger.Fatal(fmt.Errorf("USAGE: Must specify one of --cluster-id or --instance-id"))
 	}
 
 	if len(clusterID) > 0 {
-		s, err := getClusterSnapshot(clusterID)
+		s, err := getClusterSnapshot(ctx, clusterID)
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("%+v %+v\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime)
-		res, err := createClusterFromSnapshot(s)
+		fmt.Printf("Using latest cluster snapshot: %s (%s)\n", aws.ToString(s.DBClusterSnapshotIdentifier), s.SnapshotCreateTime.String())
+		res, err := createClusterFromSnapshot(ctx, s)
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
+		fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
 		return
 	}
 
 	if len(instanceID) > 0 {
-		s, err := getInstanceSnapshot(clusterID)
+		s, err := getInstanceSnapshot(ctx, clusterID)
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("%+v %+v\n", aws.ToString(s.DBSnapshotIdentifier), s.SnapshotCreateTime)
-		res, err := createInstanceFromSnapshot(s)
+		fmt.Printf("Using latest instance snapshot: %s (%s)\n", aws.ToString(s.DBSnapshotIdentifier), s.SnapshotCreateTime.String())
+		res, err := createInstanceFromSnapshot(ctx, s)
 		if err != nil {
 			logger.Fatal(err)
 		}
-		fmt.Printf("%+v\n", aws.ToString(res.Cluster.Endpoint))
+		fmt.Printf("%s\n", aws.ToString(res.Cluster.Endpoint))
 		return
 	}
 
