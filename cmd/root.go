@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
@@ -26,8 +27,6 @@ type envVar struct {
 	Key   string
 	Value interface{}
 }
-
-type envVars []envVar
 
 var rootCmd = &cobra.Command{
 	Use:   "rdsvalidator",
@@ -82,7 +81,7 @@ func main(cmd *cobra.Command, args []string) {
 	}
 
 	if len(clusterID) > 0 {
-		err := runScripts(preDir, "")
+		err := runScripts(preDir, nil)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -98,20 +97,20 @@ func main(cmd *cobra.Command, args []string) {
 			logger.Fatal(err)
 		}
 
-		v := envVars{
-			envVar{
+		v := []envVar{
+			{
 				Key:   "DB_ENDPOINT",
 				Value: aws.ToString(res.Cluster.Endpoint),
 			},
-			envVar{
+			{
 				Key:   "DB_NAME",
 				Value: aws.ToString(res.Cluster.DatabaseName),
 			},
-			envVar{
+			{
 				Key:   "DB_PORT",
-				Value: aws.ToInt32(res.Cluster.Port),
+				Value: strconv.Itoa(int(aws.ToInt32(res.Cluster.Port))),
 			},
-			envVar{
+			{
 				Key:   "DB_USER",
 				Value: aws.ToString(res.Cluster.MasterUsername),
 			},
@@ -126,7 +125,7 @@ func main(cmd *cobra.Command, args []string) {
 	}
 
 	if len(instanceID) > 0 {
-		err := runScripts(preDir, "")
+		err := runScripts(preDir, nil)
 		if err != nil {
 			logger.Fatal(err)
 		}
@@ -142,20 +141,20 @@ func main(cmd *cobra.Command, args []string) {
 			logger.Fatal(err)
 		}
 
-		v := envVars{
-			envVar{
+		v := []envVar{
+			{
 				Key:   "DB_ENDPOINT",
 				Value: aws.ToString(res.Instance.Endpoint.Address),
 			},
-			envVar{
+			{
 				Key:   "DB_NAME",
 				Value: aws.ToString(res.Instance.DBName),
 			},
-			envVar{
+			{
 				Key:   "DB_PORT",
-				Value: aws.ToInt32(&res.Instance.Endpoint.Port),
+				Value: strconv.Itoa(int(res.Instance.Endpoint.Port)),
 			},
-			envVar{
+			{
 				Key:   "DB_USER",
 				Value: aws.ToString(res.Instance.MasterUsername),
 			},

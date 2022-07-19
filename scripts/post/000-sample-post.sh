@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
 echo "hello from $0"
-echo "ENDPOINT == ${ENDPOINT}"
+env
 exit 0

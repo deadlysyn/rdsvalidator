@@ -222,7 +222,6 @@ func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (create
 	if err != nil {
 		return r, err
 	}
-	r.Instance = *iout.DBInstance
 
 	fmt.Printf("Waiting on instance (%s)...", aws.ToString(iout.DBInstance.DBInstanceIdentifier))
 	for {
@@ -235,6 +234,7 @@ func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (create
 		}
 		if aws.ToString(output.DBInstances[0].DBInstanceStatus) == "available" {
 			fmt.Println("ready!")
+			r.Instance = output.DBInstances[0]
 			break
 		}
 		fmt.Print(".")
@@ -276,6 +276,7 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 		if len(output.DBClusters) > 0 {
 			if aws.ToString(output.DBClusters[0].Status) == "available" {
 				fmt.Println("ready!")
+				r.Cluster = output.DBClusters[0]
 				break
 			}
 			fmt.Print(".")
@@ -295,8 +296,6 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 	if err != nil {
 		return r, err
 	}
-	r.Cluster = *cout.DBCluster
-	r.Instance = *iout.DBInstance
 
 	fmt.Printf("Waiting on instance (%s)...", aws.ToString(iout.DBInstance.DBInstanceIdentifier))
 	for {
@@ -309,6 +308,7 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 		}
 		if aws.ToString(output.DBInstances[0].DBInstanceStatus) == "available" {
 			fmt.Println("ready!")
+			r.Instance = output.DBInstances[0]
 			break
 		}
 		fmt.Print(".")
