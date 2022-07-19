@@ -130,7 +130,7 @@ func main(cmd *cobra.Command, args []string) {
 			logger.Fatal(err)
 		}
 
-		s, err := getInstanceSnapshot(ctx, clusterID)
+		s, err := getInstanceSnapshot(ctx, instanceID)
 		if err != nil {
 			logger.Fatal(err)
 		}

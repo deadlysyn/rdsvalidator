@@ -199,50 +199,6 @@ func getInstanceSnapshot(ctx context.Context, instanceID string) (types.DBSnapsh
 	return output.DBSnapshots[len(output.DBSnapshots)-1], nil
 }
 
-func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createResult, error) {
-	var r createResult
-
-	client, err := rdsClient(ctx)
-	if err != nil {
-		return r, err
-	}
-
-	instanceID := aws.ToString(s.DBInstanceIdentifier) + "-" + randomString(8)
-
-	iout, err := client.RestoreDBInstanceFromDBSnapshot(ctx, &rds.RestoreDBInstanceFromDBSnapshotInput{
-		AutoMinorVersionUpgrade: aws.Bool(false),
-		DBInstanceClass:         aws.String(instanceType),
-		DBInstanceIdentifier:    aws.String(instanceID),
-		DBSnapshotIdentifier:    s.DBSnapshotArn,
-		Engine:                  s.Engine,
-		Iops:                    aws.Int32(0),
-		MultiAZ:                 aws.Bool(false),
-		PubliclyAccessible:      aws.Bool(false),
-	})
-	if err != nil {
-		return r, err
-	}
-
-	fmt.Printf("Waiting on instance (%s)...", aws.ToString(iout.DBInstance.DBInstanceIdentifier))
-	for {
-		time.Sleep(5 * time.Second)
-		output, err := client.DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{
-			DBInstanceIdentifier: aws.String(instanceID),
-		})
-		if err != nil {
-			return r, err
-		}
-		if aws.ToString(output.DBInstances[0].DBInstanceStatus) == "available" {
-			fmt.Println("ready!")
-			r.Instance = output.DBInstances[0]
-			break
-		}
-		fmt.Print(".")
-	}
-
-	return r, nil
-}
-
 func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (createResult, error) {
 	var r createResult
 
@@ -285,6 +241,7 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 
 	iout, err := client.CreateDBInstance(ctx, &rds.CreateDBInstanceInput{
 		AutoMinorVersionUpgrade: aws.Bool(false),
+		BackupRetentionPeriod:   aws.Int32(0),
 		DBClusterIdentifier:     aws.String(clusterID),
 		DBInstanceClass:         aws.String(instanceType),
 		DBInstanceIdentifier:    aws.String(clusterID + "-" + "instance-1"),
@@ -309,6 +266,50 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 		if aws.ToString(output.DBInstances[0].DBInstanceStatus) == "available" {
 			fmt.Println("ready!")
 			r.Instance = output.DBInstances[0]
+			break
+		}
+		fmt.Print(".")
+	}
+
+	return r, nil
+}
+
+func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createResult, error) {
+	var r createResult
+
+	client, err := rdsClient(ctx)
+	if err != nil {
+		return r, err
+	}
+
+	instanceID := aws.ToString(s.DBInstanceIdentifier) + "-" + randomString(8)
+
+	iout, err := client.RestoreDBInstanceFromDBSnapshot(ctx, &rds.RestoreDBInstanceFromDBSnapshotInput{
+		AutoMinorVersionUpgrade: aws.Bool(false),
+		DBInstanceClass:         aws.String(instanceType),
+		DBInstanceIdentifier:    aws.String(instanceID),
+		DBSnapshotIdentifier:    s.DBSnapshotArn,
+		Engine:                  s.Engine,
+		Iops:                    aws.Int32(0),
+		MultiAZ:                 aws.Bool(false),
+		PubliclyAccessible:      aws.Bool(false),
+	})
+	if err != nil {
+		return r, err
+	}
+
+	fmt.Printf("Waiting on instance (%s)...", aws.ToString(iout.DBInstance.DBInstanceIdentifier))
+	for {
+		time.Sleep(5 * time.Second)
+		output, err := client.DescribeDBInstances(ctx, &rds.DescribeDBInstancesInput{
+			DBInstanceIdentifier: aws.String(instanceID),
+		})
+		if err != nil {
+			return r, err
+		}
+		if aws.ToString(output.DBInstances[0].DBInstanceStatus) == "available" {
+			r.Instance = output.DBInstances[0]
+			fmt.Println("ready!")
 			break
 		}
 		fmt.Print(".")
