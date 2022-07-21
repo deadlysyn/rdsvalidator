@@ -57,13 +57,20 @@ func createKeypair(ctx context.Context) (*ec2.CreateKeyPairOutput, error) {
 	return k, nil
 }
 
-func deleteKeypair() {
-	// _, err = client.DeleteKeyPair(ctx, &ec2.DeleteKeyPairInput{
-	// 	KeyPairId: k.KeyPairId,
-	// })
-	// if err != nil {
-	// 	return err
-	// }
+func deleteKeypair(ctx context.Context, keypairID string) error {
+	client, err := ec2Client(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.DeleteKeyPair(ctx, &ec2.DeleteKeyPairInput{
+		KeyPairId: aws.String(keypairID),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func createSecurityGroup(ctx context.Context, vpcID string) (*ec2.CreateSecurityGroupOutput, error) {
@@ -115,16 +122,26 @@ func createSecurityGroup(ctx context.Context, vpcID string) (*ec2.CreateSecurity
 	return g, nil
 }
 
-func deleteSecurityGroup() {
-	// _, err = client.DeleteSecurityGroup(ctx, &ec2.DeleteSecurityGroupInput{
-	// 	GroupId: g.GroupId,
-	// })
+func deleteSecurityGroup(ctx context.Context, groupID string) error {
+	client, err := ec2Client(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.DeleteSecurityGroup(ctx, &ec2.DeleteSecurityGroupInput{
+		GroupId: aws.String(groupID),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func createInstance(ctx context.Context, res getResult) error {
 	client, err := ec2Client(ctx)
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 
 	k, err := createKeypair(ctx)
@@ -185,20 +202,18 @@ func createInstance(ctx context.Context, res getResult) error {
 	return nil
 }
 
-func deleteInstance() {
-	// t, err := client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
-	// 	InstanceIds: []string{aws.ToString(i.Instances[0].InstanceId)},
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-	// for t.TerminatingInstances[0].CurrentState.Name != "terminated" {
-	// 	fmt.Println(t.TerminatingInstances[0].CurrentState.Name)
-	// 	t, err = client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
-	// 		InstanceIds: []string{aws.ToString(i.Instances[0].InstanceId)},
-	// 	})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
+func deleteInstance(ctx context.Context, instanceID string) error {
+	client, err := ec2Client(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
+		InstanceIds: []string{instanceID},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
