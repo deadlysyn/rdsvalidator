@@ -13,12 +13,15 @@ import (
 )
 
 var (
-	clusterID    string
-	instanceID   string
-	instanceType = "db.t3.medium"
-	preDir       string
-	postDir      string
-	list         = false
+	bastionVPC    string
+	bastionSubnet string
+	clusterID     string
+	createBastion = false
+	instanceID    string
+	instanceType  = "db.t3.medium"
+	preDir        string
+	postDir       string
+	list          = false
 
 	logger *log.Logger
 )
@@ -48,6 +51,9 @@ func init() {
 	logger = log.New(os.Stderr, "", log.Lshortfile)
 
 	cobra.OnInitialize(initConfig)
+	rootCmd.PersistentFlags().StringVar(&bastionVPC, "bastion-vpc", bastionVPC, "VPC used to deploy ephemeral bastion")
+	rootCmd.PersistentFlags().StringVar(&bastionSubnet, "bastion-subnet", bastionSubnet, "subnet used to deploy ephemeral bastion")
+	rootCmd.PersistentFlags().BoolVar(&createBastion, "create-bastion", createBastion, "create bastion host used to proxy DB connections")
 	rootCmd.PersistentFlags().StringVar(&clusterID, "cluster-id", clusterID, "use latest snapshot for specified cluster ID")
 	rootCmd.PersistentFlags().StringVar(&instanceID, "instance-id", instanceID, "use latest snapshot for specified instance ID")
 	rootCmd.PersistentFlags().StringVar(&instanceType, "instance-type", instanceType, "RDS instance type")
@@ -61,8 +67,28 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match RV_*
 }
 
+// TODO: refactor as smaller functions
 func main(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
+
+	// testing
+	if createBastion {
+		if len(bastionVPC) == 0 || len(bastionSubnet) == 0 {
+			cmd.Help()
+			return
+		}
+		// this needs to come later and pass a specific cluster or instance
+		res, err := getDatabases(ctx)
+		if err != nil {
+			logger.Fatal(err)
+		}
+
+		err = createInstance(ctx, res)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		return
+	}
 
 	if list {
 		res, err := getDatabases(ctx)
