@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -10,6 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
+
+type ec2Instance struct {
+	Instance types.Instance
+	Group    *ec2.CreateSecurityGroupOutput
+	Keypair  *ec2.CreateKeyPairOutput
+}
 
 func ec2Client(ctx context.Context) (*ec2.Client, error) {
 	cfg, err := config.LoadDefaultConfig(ctx)
@@ -63,12 +70,14 @@ func deleteKeypair(ctx context.Context, keypairID string) error {
 		return err
 	}
 
+	fmt.Printf("Deleting keypair %s...", keypairID)
 	_, err = client.DeleteKeyPair(ctx, &ec2.DeleteKeyPairInput{
 		KeyPairId: aws.String(keypairID),
 	})
 	if err != nil {
 		return err
 	}
+	fmt.Println("done.")
 
 	return nil
 }
@@ -128,41 +137,71 @@ func deleteSecurityGroup(ctx context.Context, groupID string) error {
 		return err
 	}
 
+	fmt.Printf("Deleting security group %s...", groupID)
 	_, err = client.DeleteSecurityGroup(ctx, &ec2.DeleteSecurityGroupInput{
 		GroupId: aws.String(groupID),
 	})
 	if err != nil {
 		return err
 	}
+	fmt.Println("done.")
 
 	return nil
 }
 
-func createInstance(ctx context.Context, res getResult) error {
+func createEc2Instance(ctx context.Context) (ec2Instance, error) {
+	i := ec2Instance{}
+
 	client, err := ec2Client(ctx)
 	if err != nil {
-		return err
+		return i, err
 	}
 
 	k, err := createKeypair(ctx)
 	if err != nil {
-		return err
+		return i, err
 	}
+	i.Keypair = k
 
 	g, err := createSecurityGroup(ctx, bastionVPC)
 	if err != nil {
-		return err
+		return i, err
+	}
+	i.Group = g
+
+	// TODO: allow passing ami id
+	img, err := client.DescribeImages(ctx, &ec2.DescribeImagesInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("name"),
+				Values: []string{"ubuntu/images/*ubuntu-focal-20.*-server-*"},
+			},
+			{
+				Name:   aws.String("architecture"),
+				Values: []string{"arm64"},
+			},
+			{
+				Name:   aws.String("virtualization-type"),
+				Values: []string{"hvm"},
+			},
+		},
+		Owners: []string{"099720109477"},
+	})
+	if err != nil {
+		return i, err
 	}
 
-	// debug
-	fmt.Println(aws.ToString(k.KeyMaterial))
-	fmt.Println(aws.ToString(g.GroupId))
+	sort.Slice(img.Images, func(i, j int) bool {
+		it, _ := time.Parse(time.RFC3339, aws.ToString(img.Images[i].CreationDate))
+		jt, _ := time.Parse(time.RFC3339, aws.ToString(img.Images[j].CreationDate))
+		return it.Before(jt)
+	})
 
-	i, err := client.RunInstances(ctx, &ec2.RunInstancesInput{
+	iout, err := client.RunInstances(ctx, &ec2.RunInstancesInput{
 		MaxCount:     aws.Int32(1),
 		MinCount:     aws.Int32(1),
-		ImageId:      aws.String("ami-0b2a3228cbf805ced"), // search to get latest or customize
-		InstanceType: types.InstanceTypeT4gNano,           // or types.InstanceTypeT3Nano
+		ImageId:      img.Images[len(img.Images)-1].ImageId,
+		InstanceType: types.InstanceTypeT4gNano,
 		KeyName:      k.KeyName,
 		NetworkInterfaces: []types.InstanceNetworkInterfaceSpecification{
 			{
@@ -170,15 +209,15 @@ func createInstance(ctx context.Context, res getResult) error {
 				DeleteOnTermination:      aws.Bool(true),
 				DeviceIndex:              aws.Int32(0),
 				Groups:                   []string{*g.GroupId},
-				SubnetId:                 aws.String(bastionSubnet), // have to handle cluster vs instance differently
+				SubnetId:                 aws.String(bastionSubnet),
 			},
 		},
 	})
 	if err != nil {
-		return err
+		return i, err
 	}
 
-	instanceID := aws.ToString(i.Instances[0].InstanceId)
+	instanceID := aws.ToString(iout.Instances[0].InstanceId)
 	fmt.Printf("Creating ec2 instance %s...", instanceID)
 
 	for {
@@ -187,19 +226,17 @@ func createInstance(ctx context.Context, res getResult) error {
 			InstanceIds: []string{instanceID},
 		})
 		if err != nil {
-			return err
+			return i, err
 		}
 		if len(id.Reservations) > 0 && id.Reservations[0].Instances[0].PublicIpAddress != nil {
 			fmt.Println("done.")
-			// debug
-			fmt.Println(aws.ToString(id.Reservations[0].Instances[0].InstanceId))
-			fmt.Println(aws.ToString(id.Reservations[0].Instances[0].PublicIpAddress))
+			i.Instance = id.Reservations[0].Instances[0]
 			break
 		}
 		fmt.Print(".")
 	}
 
-	return nil
+	return i, nil
 }
 
 func deleteInstance(ctx context.Context, instanceID string) error {
@@ -208,12 +245,27 @@ func deleteInstance(ctx context.Context, instanceID string) error {
 		return err
 	}
 
-	_, err = client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
+	t, err := client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
 		InstanceIds: []string{instanceID},
 	})
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("Terminating ec2 instance %s...", instanceID)
+
+	// must be terminated to delete security group
+	for t.TerminatingInstances[0].CurrentState.Name != "terminated" {
+		time.Sleep(1 * time.Second)
+		t, err = client.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
+			InstanceIds: []string{instanceID},
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Print(".")
+	}
+	fmt.Println("done.")
 
 	return nil
 }
