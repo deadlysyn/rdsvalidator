@@ -14,12 +14,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
-type createResult struct {
+type createDBResult struct {
 	Cluster  types.DBCluster
 	Instance types.DBInstance
 }
 
-type getResult struct {
+type getDBResult struct {
 	Clusters  []types.DBCluster
 	Instances []types.DBInstance
 }
@@ -45,8 +45,6 @@ type databasesOutput struct {
 	Instances []instance `json:"instances,omitempty"`
 }
 
-type snapshotsOutput struct{}
-
 func rdsClient(ctx context.Context) (*rds.Client, error) {
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -56,8 +54,8 @@ func rdsClient(ctx context.Context) (*rds.Client, error) {
 	return rds.NewFromConfig(cfg), nil
 }
 
-func getDatabases(ctx context.Context) (getResult, error) {
-	var r getResult
+func getDatabases(ctx context.Context) (getDBResult, error) {
+	var r getDBResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
@@ -102,7 +100,7 @@ func getDatabases(ctx context.Context) (getResult, error) {
 	return r, nil
 }
 
-func printDatabases(r getResult) error {
+func printDatabases(r getDBResult) error {
 	var out databasesOutput
 
 	for _, v := range r.Clusters {
@@ -199,8 +197,9 @@ func getInstanceSnapshot(ctx context.Context, instanceID string) (types.DBSnapsh
 	return output.DBSnapshots[len(output.DBSnapshots)-1], nil
 }
 
-func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (createResult, error) {
-	var r createResult
+// https://stackoverflow.com/questions/35709153/disabling-aws-rds-backups-when-creating-updating-instances/35730978#35730978
+func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (createDBResult, error) {
+	var r createDBResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
@@ -274,8 +273,9 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 	return r, nil
 }
 
-func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createResult, error) {
-	var r createResult
+// https://stackoverflow.com/questions/35709153/disabling-aws-rds-backups-when-creating-updating-instances/35730978#35730978
+func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createDBResult, error) {
+	var r createDBResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
