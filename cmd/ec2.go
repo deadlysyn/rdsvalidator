@@ -82,6 +82,7 @@ func deleteKeypair(ctx context.Context, keypairID string) error {
 	return nil
 }
 
+// TODO: allow passing list of ingress cidrs
 func createSecurityGroup(ctx context.Context, vpcID string) (*ec2.CreateSecurityGroupOutput, error) {
 	g := &ec2.CreateSecurityGroupOutput{}
 
@@ -149,7 +150,7 @@ func deleteSecurityGroup(ctx context.Context, groupID string) error {
 	return nil
 }
 
-func createEc2Instance(ctx context.Context) (ec2Instance, error) {
+func createProxy(ctx context.Context) (ec2Instance, error) {
 	i := ec2Instance{}
 
 	client, err := ec2Client(ctx)
@@ -163,7 +164,7 @@ func createEc2Instance(ctx context.Context) (ec2Instance, error) {
 	}
 	i.Keypair = k
 
-	g, err := createSecurityGroup(ctx, bastionVPC)
+	g, err := createSecurityGroup(ctx, proxyVPC)
 	if err != nil {
 		return i, err
 	}
@@ -209,7 +210,7 @@ func createEc2Instance(ctx context.Context) (ec2Instance, error) {
 				DeleteOnTermination:      aws.Bool(true),
 				DeviceIndex:              aws.Int32(0),
 				Groups:                   []string{*g.GroupId},
-				SubnetId:                 aws.String(bastionSubnet),
+				SubnetId:                 aws.String(proxySubnet),
 			},
 		},
 	})

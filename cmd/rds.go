@@ -14,35 +14,35 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
-type createDBResult struct {
+type createDatabaseResult struct {
 	Cluster  types.DBCluster
 	Instance types.DBInstance
 }
 
-type getDBResult struct {
+type getDatabaseResult struct {
 	Clusters  []types.DBCluster
 	Instances []types.DBInstance
 }
 
-type clusterMember struct {
+type databaseClusterMember struct {
 	Identifier string `json:"identifier,omitempty"`
 	Writer     bool   `json:"writer,omitempty"`
 }
 
-type cluster struct {
-	Identifier string          `json:"identifier,omitempty"`
-	Status     string          `json:"status,omitempty"`
-	Members    []clusterMember `json:"members,omitempty"`
+type databaseCluster struct {
+	Identifier string                  `json:"identifier,omitempty"`
+	Status     string                  `json:"status,omitempty"`
+	Members    []databaseClusterMember `json:"members,omitempty"`
 }
 
-type instance struct {
+type databaseInstance struct {
 	Identifier string `json:"identifier,omitempty"`
 	Status     string `json:"status,omitempty"`
 }
 
-type databasesOutput struct {
-	Clusters  []cluster  `json:"clusters,omitempty"`
-	Instances []instance `json:"instances,omitempty"`
+type databaseOutput struct {
+	Clusters  []databaseCluster  `json:"clusters,omitempty"`
+	Instances []databaseInstance `json:"instances,omitempty"`
 }
 
 func rdsClient(ctx context.Context) (*rds.Client, error) {
@@ -54,8 +54,8 @@ func rdsClient(ctx context.Context) (*rds.Client, error) {
 	return rds.NewFromConfig(cfg), nil
 }
 
-func getDatabases(ctx context.Context) (getDBResult, error) {
-	var r getDBResult
+func getDatabases(ctx context.Context) (getDatabaseResult, error) {
+	var r getDatabaseResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
@@ -100,15 +100,15 @@ func getDatabases(ctx context.Context) (getDBResult, error) {
 	return r, nil
 }
 
-func printDatabases(r getDBResult) error {
-	var out databasesOutput
+func printDatabases(r getDatabaseResult) error {
+	var out databaseOutput
 
 	for _, v := range r.Clusters {
-		var c cluster
+		var c databaseCluster
 		c.Identifier = aws.ToString(v.DBClusterIdentifier)
 		c.Status = aws.ToString(v.Status)
 		for _, vv := range v.DBClusterMembers {
-			var m clusterMember
+			var m databaseClusterMember
 			m.Identifier = aws.ToString(vv.DBInstanceIdentifier)
 			m.Writer = vv.IsClusterWriter
 			c.Members = append(c.Members, m)
@@ -123,7 +123,7 @@ func printDatabases(r getDBResult) error {
 		}
 	}
 	for _, v := range nonClusterInstances {
-		var i instance
+		var i databaseInstance
 		i.Identifier = aws.ToString(v.DBInstanceIdentifier)
 		i.Status = aws.ToString(v.DBInstanceStatus)
 		out.Instances = append(out.Instances, i)
@@ -198,8 +198,8 @@ func getInstanceSnapshot(ctx context.Context, instanceID string) (types.DBSnapsh
 }
 
 // https://stackoverflow.com/questions/35709153/disabling-aws-rds-backups-when-creating-updating-instances/35730978#35730978
-func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (createDBResult, error) {
-	var r createDBResult
+func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (createDatabaseResult, error) {
+	var r createDatabaseResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
@@ -274,8 +274,8 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 }
 
 // https://stackoverflow.com/questions/35709153/disabling-aws-rds-backups-when-creating-updating-instances/35730978#35730978
-func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createDBResult, error) {
-	var r createDBResult
+func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createDatabaseResult, error) {
+	var r createDatabaseResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
