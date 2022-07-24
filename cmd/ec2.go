@@ -240,7 +240,7 @@ func createProxy(ctx context.Context) (ec2Instance, error) {
 	return i, nil
 }
 
-func deleteInstance(ctx context.Context, instanceID string) error {
+func deleteProxy(ctx context.Context, instanceID string) error {
 	client, err := ec2Client(ctx)
 	if err != nil {
 		return err
