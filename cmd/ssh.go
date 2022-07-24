@@ -78,9 +78,10 @@ func setupSSHTunnel(proxy, targetHost, privateKey string, localPort, remotePort 
 	fmt.Println(proxyString)
 
 	// TODO: make username configurable
-	cmd = exec.Command("ssh", "-i", tmpFile.Name(), "-L", proxyString, fmt.Sprintf("ubuntu@%s", proxy))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd = exec.Command("ssh", "-i", tmpFile.Name(), "-L", proxyString,
+		"-fN", "-o 'ExitOnForwardFailure yes'", fmt.Sprintf("ubuntu@%s", proxy))
+	cmd.Stdout = nil
+	cmd.Stderr = nil
 	err = cmd.Run()
 	if err != nil {
 		return err
