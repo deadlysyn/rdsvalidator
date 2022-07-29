@@ -14,35 +14,35 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
-type createDatabaseResult struct {
+type createDBResult struct {
 	Cluster  types.DBCluster
 	Instance types.DBInstance
 }
 
-type getDatabaseResult struct {
+type getDBResult struct {
 	Clusters  []types.DBCluster
 	Instances []types.DBInstance
 }
 
-type databaseClusterMember struct {
+type clusterMember struct {
 	Identifier string `json:"identifier,omitempty"`
 	Writer     bool   `json:"writer,omitempty"`
 }
 
-type databaseCluster struct {
-	Identifier string                  `json:"identifier,omitempty"`
-	Status     string                  `json:"status,omitempty"`
-	Members    []databaseClusterMember `json:"members,omitempty"`
+type cluster struct {
+	Identifier string          `json:"identifier,omitempty"`
+	Status     string          `json:"status,omitempty"`
+	Members    []clusterMember `json:"members,omitempty"`
 }
 
-type databaseInstance struct {
+type instance struct {
 	Identifier string `json:"identifier,omitempty"`
 	Status     string `json:"status,omitempty"`
 }
 
-type databaseOutput struct {
-	Clusters  []databaseCluster  `json:"clusters,omitempty"`
-	Instances []databaseInstance `json:"instances,omitempty"`
+type dbOutput struct {
+	Clusters  []cluster  `json:"clusters,omitempty"`
+	Instances []instance `json:"instances,omitempty"`
 }
 
 func rdsClient(ctx context.Context) (*rds.Client, error) {
@@ -54,8 +54,8 @@ func rdsClient(ctx context.Context) (*rds.Client, error) {
 	return rds.NewFromConfig(cfg), nil
 }
 
-func getDatabases(ctx context.Context) (getDatabaseResult, error) {
-	var r getDatabaseResult
+func getDatabases(ctx context.Context) (getDBResult, error) {
+	var r getDBResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
@@ -100,15 +100,15 @@ func getDatabases(ctx context.Context) (getDatabaseResult, error) {
 	return r, nil
 }
 
-func printDatabases(r getDatabaseResult) error {
-	var out databaseOutput
+func printDatabases(r getDBResult) error {
+	var out dbOutput
 
 	for _, v := range r.Clusters {
-		var c databaseCluster
+		var c cluster
 		c.Identifier = aws.ToString(v.DBClusterIdentifier)
 		c.Status = aws.ToString(v.Status)
 		for _, vv := range v.DBClusterMembers {
-			var m databaseClusterMember
+			var m clusterMember
 			m.Identifier = aws.ToString(vv.DBInstanceIdentifier)
 			m.Writer = vv.IsClusterWriter
 			c.Members = append(c.Members, m)
@@ -123,7 +123,7 @@ func printDatabases(r getDatabaseResult) error {
 		}
 	}
 	for _, v := range nonClusterInstances {
-		var i databaseInstance
+		var i instance
 		i.Identifier = aws.ToString(v.DBInstanceIdentifier)
 		i.Status = aws.ToString(v.DBInstanceStatus)
 		out.Instances = append(out.Instances, i)
@@ -198,22 +198,23 @@ func getInstanceSnapshot(ctx context.Context, instanceID string) (types.DBSnapsh
 }
 
 // https://stackoverflow.com/questions/35709153/disabling-aws-rds-backups-when-creating-updating-instances/35730978#35730978
-func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (createDatabaseResult, error) {
-	var r createDatabaseResult
+func createClusterFromSnapshot(ctx context.Context, snapshot types.DBClusterSnapshot, groupID string) (createDBResult, error) {
+	var r createDBResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
 		return r, err
 	}
 
-	clusterID := aws.ToString(s.DBClusterIdentifier) + "-" + randomString(8)
+	clusterID := aws.ToString(snapshot.DBClusterIdentifier) + "-" + randomString(8)
 
 	cout, err := client.RestoreDBClusterFromSnapshot(ctx, &rds.RestoreDBClusterFromSnapshotInput{
 		DBClusterIdentifier:    aws.String(clusterID),
 		DBClusterInstanceClass: aws.String(instanceType),
-		Engine:                 s.Engine,
+		Engine:                 snapshot.Engine,
 		PubliclyAccessible:     aws.Bool(false),
-		SnapshotIdentifier:     s.DBClusterSnapshotArn,
+		SnapshotIdentifier:     snapshot.DBClusterSnapshotArn,
+		VpcSecurityGroupIds:    []string{groupID},
 	})
 	if err != nil {
 		return r, err
@@ -244,10 +245,11 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 		DBClusterIdentifier:     aws.String(clusterID),
 		DBInstanceClass:         aws.String(instanceType),
 		DBInstanceIdentifier:    aws.String(clusterID + "-" + "instance-1"),
-		Engine:                  s.Engine,
+		Engine:                  snapshot.Engine,
 		Iops:                    aws.Int32(0),
 		MultiAZ:                 aws.Bool(false),
 		PubliclyAccessible:      aws.Bool(false),
+		VpcSecurityGroupIds:     []string{groupID},
 	})
 	if err != nil {
 		return r, err
@@ -274,25 +276,26 @@ func createClusterFromSnapshot(ctx context.Context, s types.DBClusterSnapshot) (
 }
 
 // https://stackoverflow.com/questions/35709153/disabling-aws-rds-backups-when-creating-updating-instances/35730978#35730978
-func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (createDatabaseResult, error) {
-	var r createDatabaseResult
+func createInstanceFromSnapshot(ctx context.Context, snapshot types.DBSnapshot, groupID string) (createDBResult, error) {
+	var r createDBResult
 
 	client, err := rdsClient(ctx)
 	if err != nil {
 		return r, err
 	}
 
-	instanceID := aws.ToString(s.DBInstanceIdentifier) + "-" + randomString(8)
+	instanceID := aws.ToString(snapshot.DBInstanceIdentifier) + "-" + randomString(8)
 
 	iout, err := client.RestoreDBInstanceFromDBSnapshot(ctx, &rds.RestoreDBInstanceFromDBSnapshotInput{
 		AutoMinorVersionUpgrade: aws.Bool(false),
 		DBInstanceClass:         aws.String(instanceType),
 		DBInstanceIdentifier:    aws.String(instanceID),
-		DBSnapshotIdentifier:    s.DBSnapshotArn,
-		Engine:                  s.Engine,
+		DBSnapshotIdentifier:    snapshot.DBSnapshotArn,
+		Engine:                  snapshot.Engine,
 		Iops:                    aws.Int32(0),
 		MultiAZ:                 aws.Bool(false),
 		PubliclyAccessible:      aws.Bool(false),
+		VpcSecurityGroupIds:     []string{groupID},
 	})
 	if err != nil {
 		return r, err
@@ -316,4 +319,33 @@ func createInstanceFromSnapshot(ctx context.Context, s types.DBSnapshot) (create
 	}
 
 	return r, nil
+}
+
+// func deleteDatabaseCluster(ctx context.Context, clusterID, instanceID string) error {
+// 	client, err := rdsClient(ctx)
+// 	if err != nil {
+// 		return err
+// 	}
+
+//   client.DeleteDBCluster()
+
+// 	return nil
+// }
+
+func deleteDatabaseInstance(ctx context.Context, instanceID string) error {
+	client, err := rdsClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.DeleteDBInstance(ctx, &rds.DeleteDBInstanceInput{
+		DBInstanceIdentifier:   aws.String(instanceID),
+		DeleteAutomatedBackups: aws.Bool(true),
+		SkipFinalSnapshot:      true,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

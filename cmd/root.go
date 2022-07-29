@@ -6,9 +6,15 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
+	"os/signal"
+	"reflect"
 	"strconv"
+	"syscall"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,6 +35,8 @@ var (
 
 	logger *log.Logger
 )
+
+type bagOfHolding []interface{}
 
 type envVar struct {
 	Key   string
@@ -73,8 +81,48 @@ func initConfig() {
 	viper.AutomaticEnv() // read in environment variables that match RV_*
 }
 
+func catchSignal(b *bagOfHolding) {
+	sig := make(chan os.Signal, 1)
+	// signal.Notify(sig)
+	signal.Notify(sig, os.Interrupt, syscall.SIGINT, syscall.SIGQUIT)
+	_ = <-sig
+	cleanup(b)
+}
+
+func cleanup(b *bagOfHolding) {
+	fmt.Println("Starting cleanup...")
+	// walk through created resources in reverse
+	for i := len(*b) - 1; i >= 0; i-- {
+		v := (*b)[i]
+		switch v.(type) {
+		case *exec.Cmd:
+			defer v.(exec.Cmd).Process.Release()
+		case *ec2.CreateKeyPairOutput:
+			k := aws.ToString(v.(ec2.CreateKeyPairOutput).KeyPairId)
+			deleteKeypair(context.TODO(), k)
+		case types.Instance:
+			i := aws.ToString(v.(types.Instance).InstanceId)
+			deleteProxy(context.TODO(), i)
+		case createDBResult:
+			d := aws.ToString(v.(createDBResult).Instance.DBInstanceIdentifier)
+			deleteDatabaseInstance(context.TODO(), d)
+		case *ec2.CreateSecurityGroupOutput:
+			g := aws.ToString(v.(ec2.CreateSecurityGroupOutput).GroupId)
+			deleteSecurityGroup(context.TODO(), g)
+		default:
+			fmt.Println(reflect.TypeOf(v).String())
+		}
+	}
+
+	os.Exit(255)
+}
+
 func main(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
+
+	var state bagOfHolding // copy of created resources
+	go catchSignal(&state) // cleanup on signal
+	defer cleanup(&state)  // cleanup on normal return
 
 	if list {
 		res, err := getDatabases(ctx)
@@ -88,8 +136,8 @@ func main(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	if len(clusterID) == 0 && len(instanceID) == 0 {
-		logger.Fatal(fmt.Errorf("USAGE: Must specify --cluster-id or --instance-id"))
+	if (len(clusterID) == 0 && len(instanceID) == 0) || (len(clusterID) > 0 && len(instanceID) > 0) {
+		logger.Fatal("USAGE: Must specify one of --cluster-id or --instance-id")
 	}
 
 	if len(preDir) > 0 {
@@ -99,141 +147,118 @@ func main(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	var res createDatabaseResult
-	var vars []envVar
+	// create security group now so we have id when creating database
+	var groupID string
+	if proxyCreate {
+		if len(proxyVPC) == 0 || len(proxySubnet) == 0 {
+			logger.Fatal("USAGE: Must provide --proxy-vpc and --proxy-subnet")
+		}
 
+		sg, err := createSecurityGroup(ctx, proxyVPC)
+		if err != nil {
+			logger.Fatal(err)
+		}
+
+		groupID = aws.ToString(sg.GroupId)
+		state = append(state, sg)
+	}
+
+	var res createDBResult
 	if len(clusterID) > 0 {
 		snapshot, err := getClusterSnapshot(ctx, clusterID)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
 		fmt.Printf("Using latest cluster snapshot: '%s' (%s)\n", aws.ToString(snapshot.DBClusterSnapshotIdentifier), snapshot.SnapshotCreateTime.String())
 
-		res, err = createClusterFromSnapshot(ctx, snapshot)
+		res, err = createClusterFromSnapshot(ctx, snapshot, groupID)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
-
-		// vars = []envVar{
-		// 	{
-		// 		Key:   "DB_ENDPOINT",
-		// 		Value: aws.ToString(res.Cluster.Endpoint),
-		// 	},
-		// 	{
-		// 		Key:   "DB_NAME",
-		// 		Value: aws.ToString(res.Cluster.DatabaseName),
-		// 	},
-		// 	{
-		// 		Key:   "DB_PORT",
-		// 		Value: strconv.Itoa(int(aws.ToInt32(res.Cluster.Port))),
-		// 	},
-		// 	{
-		// 		Key:   "DB_USER",
-		// 		Value: aws.ToString(res.Cluster.MasterUsername),
-		// 	},
-		// }
 	}
 
 	if len(instanceID) > 0 {
 		snapshot, err := getInstanceSnapshot(ctx, instanceID)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
 		fmt.Printf("Using latest instance snapshot: '%s' (%s)\n", aws.ToString(snapshot.DBSnapshotIdentifier), snapshot.SnapshotCreateTime.String())
 
-		res, err = createInstanceFromSnapshot(ctx, snapshot)
+		res, err = createInstanceFromSnapshot(ctx, snapshot, groupID)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
-
-		// vars = []envVar{
-		// 	{
-		// 		Key:   "DB_ENDPOINT",
-		// 		Value: aws.ToString(res.Instance.Endpoint.Address),
-		// 	},
-		// 	{
-		// 		Key:   "DB_NAME",
-		// 		Value: aws.ToString(res.Instance.DBName),
-		// 	},
-		// 	{
-		// 		Key:   "DB_PORT",
-		// 		Value: strconv.Itoa(int(res.Instance.Endpoint.Port)),
-		// 	},
-		// 	{
-		// 		Key:   "DB_USER",
-		// 		Value: aws.ToString(res.Instance.MasterUsername),
-		// 	},
-		// }
 	}
 
-	vars = []envVar{
+	state = append(state, res)
+
+	// TODO: allow customizing ports
+	dbHost := aws.ToString(res.Instance.Endpoint.Address)
+	dbPort := int(res.Instance.Endpoint.Port)
+	localPort := dbPort + 10000
+
+	if proxyCreate || len(proxy) > 0 {
+		dbHost = "localhost"
+	}
+
+	vars := []envVar{
 		{
-			Key:   "DB_ENDPOINT",
-			Value: aws.ToString(res.Instance.Endpoint.Address),
+			Key:   "DB_HOST",
+			Value: dbHost,
 		},
 		{
 			Key:   "DB_NAME",
-			Value: aws.ToString(res.Instance.DBName),
+			Value: res.Instance.DBName,
 		},
 		{
 			Key:   "DB_PORT",
-			Value: strconv.Itoa(int(res.Instance.Endpoint.Port)),
+			Value: strconv.Itoa(localPort),
 		},
 		{
 			Key:   "DB_USER",
 			Value: aws.ToString(res.Instance.MasterUsername),
 		},
 	}
-	// debug
-	fmt.Printf("%+v\n", vars)
 
-	// TODO: allow customizing local port
+	var c *exec.Cmd
 	if len(proxy) > 0 {
 		if len(proxyKey) == 0 {
-			logger.Fatal(fmt.Errorf("USAGE: Must provide --proxy-key"))
+			logger.Println("USAGE: Must provide --proxy-key")
+			return // make sure defer runs
 		}
 
 		key, err := ioutil.ReadFile(proxyKey)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
 
-		err = setupSSHTunnel(proxy,
-			aws.ToString(res.Instance.Endpoint.Address),
-			string(key),
-			int(res.Instance.Endpoint.Port),
-			int(res.Instance.Endpoint.Port))
+		c, err = setupSSHTunnel(proxy, aws.ToString(res.Instance.Endpoint.Address), string(key), localPort, dbPort)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
 	} else if proxyCreate {
-		if len(proxyVPC) == 0 || len(proxySubnet) == 0 {
-			logger.Fatal(fmt.Errorf("USAGE: Must provide --proxy-vpc and --proxy-subnet"))
-			return
+		proxy, err := createProxy(ctx, groupID)
+		if err != nil {
+			logger.Println(err)
+			return // make sure defer runs
 		}
 
-		proxy, err := createProxy(ctx)
+		proxyAddr := aws.ToString(proxy.Instance.PublicIpAddress)
+		key := aws.ToString(proxy.Keypair.KeyMaterial)
+		c, err = setupSSHTunnel(proxyAddr, aws.ToString(res.Instance.Endpoint.Address), key, localPort, dbPort)
 		if err != nil {
-			logger.Fatal(err)
+			logger.Println(err)
+			return // make sure defer runs
 		}
-		defer func() {
-			deleteInstance(ctx, aws.ToString(proxy.Instance.InstanceId))
-			deleteKeypair(ctx, aws.ToString(proxy.Keypair.KeyPairId))
-			deleteSecurityGroup(ctx, aws.ToString(proxy.Group.GroupId))
-		}()
-
-		err = setupSSHTunnel(aws.ToString(proxy.Instance.PublicIpAddress),
-			aws.ToString(res.Instance.Endpoint.Address),
-			aws.ToString(proxy.Keypair.KeyMaterial),
-			int(res.Instance.Endpoint.Port),
-			int(res.Instance.Endpoint.Port))
-		if err != nil {
-			logger.Fatal(err)
-		}
-	} else {
-		logger.Fatal(fmt.Errorf("USAGE: Must provide --proxy or --proxy-create"))
-		return
+		state = append(state, proxy.Instance, proxy.Keypair)
 	}
+	state = append(state, c)
 
 	if len(postDir) > 0 {
 		err := runScripts(postDir, vars)
@@ -242,7 +267,10 @@ func main(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// catch signals / cleanup
+	// debug
+	fmt.Println("Waiting...")
+	fmt.Scanln()
 
 	cmd.Help()
+	return // make sure defer runs
 }

@@ -96,7 +96,7 @@ func createSecurityGroup(ctx context.Context, vpcID string) (*ec2.CreateSecurity
 
 	g, err = client.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
 		GroupName:   aws.String(sgName),
-		Description: aws.String("grant temporary ssh access for rds validator"),
+		Description: aws.String("grant temporary access for rds validator"),
 		VpcId:       aws.String(vpcID),
 	})
 	if err != nil {
@@ -129,6 +129,14 @@ func createSecurityGroup(ctx context.Context, vpcID string) (*ec2.CreateSecurity
 		return g, err
 	}
 
+	_, err = client.AuthorizeSecurityGroupIngress(ctx, &ec2.AuthorizeSecurityGroupIngressInput{
+		GroupId:                 g.GroupId,
+		SourceSecurityGroupName: aws.String(sgName),
+	})
+	if err != nil {
+		return g, err
+	}
+
 	return g, nil
 }
 
@@ -150,7 +158,7 @@ func deleteSecurityGroup(ctx context.Context, groupID string) error {
 	return nil
 }
 
-func createProxy(ctx context.Context) (ec2Instance, error) {
+func createProxy(ctx context.Context, groupID string) (ec2Instance, error) {
 	i := ec2Instance{}
 
 	client, err := ec2Client(ctx)
@@ -163,12 +171,6 @@ func createProxy(ctx context.Context) (ec2Instance, error) {
 		return i, err
 	}
 	i.Keypair = k
-
-	g, err := createSecurityGroup(ctx, proxyVPC)
-	if err != nil {
-		return i, err
-	}
-	i.Group = g
 
 	// TODO: allow passing ami id
 	img, err := client.DescribeImages(ctx, &ec2.DescribeImagesInput{
@@ -209,7 +211,7 @@ func createProxy(ctx context.Context) (ec2Instance, error) {
 				AssociatePublicIpAddress: aws.Bool(true),
 				DeleteOnTermination:      aws.Bool(true),
 				DeviceIndex:              aws.Int32(0),
-				Groups:                   []string{*g.GroupId},
+				Groups:                   []string{groupID},
 				SubnetId:                 aws.String(proxySubnet),
 			},
 		},

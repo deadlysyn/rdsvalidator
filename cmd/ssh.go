@@ -9,41 +9,16 @@ import (
 	"time"
 )
 
-// func runScripts(dir string, vars []envVar) error {
-// 	fmt.Printf("Executing scripts in %s...\n", dir)
-
-// 	scripts, err := getScripts(dir)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	for k, v := range scripts {
-// 		fmt.Printf("[%d/%d] Calling %s\n", k+1, len(scripts), v.Name())
-// 		cmd := exec.Command(dir + "/" + v.Name())
-// 		cmd.Stdout = os.Stdout
-// 		cmd.Stderr = os.Stderr
-// 		if vars != nil {
-// 			for _, vv := range vars {
-// 				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", vv.Key, vv.Value))
-// 			}
-// 		}
-// 		err := cmd.Run()
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	return nil
-// }
-
-func setupSSHTunnel(proxy, targetHost, privateKey string, localPort, remotePort int) error {
+func setupSSHTunnel(proxy, targetHost, privateKey string, localPort, remotePort int) (*exec.Cmd, error) {
 	// debug
 	fmt.Println(proxy)
 	fmt.Println(privateKey)
 
+	c := &exec.Cmd{}
+
 	tmpFile, err := ioutil.TempFile(os.TempDir(), "rdsvalidator-")
 	if err != nil {
-		return err
+		return c, err
 	}
 	defer func() {
 		tmpFile.Close()
@@ -52,16 +27,19 @@ func setupSSHTunnel(proxy, targetHost, privateKey string, localPort, remotePort 
 
 	_, err = tmpFile.Write([]byte(privateKey))
 	if err != nil {
-		return err
+		return c, err
 	}
 
 	// TODO: make port configurable
 	fmt.Printf("Waiting on proxy %s:22...", proxy)
-	cmd := exec.Command("ssh", "-i", tmpFile.Name(), fmt.Sprintf("ubuntu@%s", proxy), "uname")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	c = exec.Command("ssh", "-i", tmpFile.Name(), fmt.Sprintf("ubuntu@%s", proxy), "uname")
+	c.Stdout = nil
+	c.Stderr = nil
 	for {
-		err = cmd.Run()
+		err = c.Run()
+		// debug - some times hangs in this loop
+		fmt.Println(err)
+
 		if err != nil {
 			time.Sleep(1 * time.Second)
 			fmt.Print(".")
@@ -73,23 +51,16 @@ func setupSSHTunnel(proxy, targetHost, privateKey string, localPort, remotePort 
 
 	fmt.Print("Setting up tunnel...")
 	proxyString := strconv.Itoa(localPort) + fmt.Sprintf(":%s:", targetHost) + strconv.Itoa(remotePort)
-
 	// debug
 	fmt.Println(proxyString)
-
 	// TODO: make username configurable
-	cmd = exec.Command("ssh", "-i", tmpFile.Name(), "-L", proxyString,
+	c = exec.Command("ssh", "-i", tmpFile.Name(), "-L", proxyString,
 		"-fN", "-o 'ExitOnForwardFailure yes'", fmt.Sprintf("ubuntu@%s", proxy))
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	err = cmd.Run()
+	err = c.Start()
 	if err != nil {
-		return err
+		return c, err
 	}
 	fmt.Println("done.")
 
-	// debug
-	fmt.Scanln()
-
-	return nil
+	return c, nil
 }
